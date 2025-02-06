@@ -10,13 +10,13 @@ from email.mime.application import MIMEApplication
 # -------------------------- CONFIGURACIÓN --------------------------
 
 # Parámetros de conexión al servidor SMTP de Amazon SES
-SMTP_HOST = 'xxxxxxxx'
+SMTP_HOST = 'xxxxxxxxxxxxxxxxxxx'
 SMTP_PORT = 587
-SMTP_USERNAME = 'xxxxxxxx'
-SMTP_PASSWORD = 'xxxxxxxx'
+SMTP_USERNAME = 'xxxxxxxxxxxxxxxxxxx'
+SMTP_PASSWORD = 'xxxxxxxxxxxxxxxxxxx'
 
 # Correo remitente (debe estar verificado en SES)
-FROM_EMAIL = 'xxxxxxxx'
+FROM_EMAIL = 'xxxxxxxxxxxxxxxxxxx'
 
 # Archivo CSV con la lista de destinatarios.
 # Se asume que el CSV usa el delimitador ";" y tiene las columnas:
@@ -123,6 +123,9 @@ def main():
         logging.error(f"Error al conectar con el servidor SMTP: {e}")
         return
 
+    contador_session = 0
+    LIMITE_SESSION = 200
+
     # Leer el archivo CSV (con delimitador ';')
     try:
         with open(CSV_FILE, newline='', encoding='utf-8') as csvfile:
@@ -132,12 +135,31 @@ def main():
                 email_destino = fila.get("email")
                 archivo_url = fila.get("archivo")
                 nombre_completo = fila.get("nombre completo")
+                
                 if email_destino and archivo_url and nombre_completo:
                     if enviar_correo(server, email_destino, archivo_url, nombre_completo):
                         exitosos += 1
                     else:
                         fallidos += 1
-                    time.sleep(TIEMPO_ESPERA)  # Espera entre envíos
+
+                    contador_session += 1
+                    #time.sleep(TIEMPO_ESPERA)  # Espera entre envíos
+
+                    # Si se alcanza el límite de mensajes por sesión, se reinicia la conexión
+                    if contador_session >= LIMITE_SESSION:
+                        server.quit()
+                        logging.info("Reiniciando conexión SMTP tras alcanzar el límite de mensajes en la sesión.")
+                        try:
+                            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+                            server.ehlo()
+                            server.starttls()
+                            server.ehlo()
+                            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                            logging.info("Nueva conexión SMTP establecida.")
+                        except Exception as e:
+                            logging.error(f"Error al reconectar con el servidor SMTP: {e}")
+                            break  # O puedes optar por seguir reintentando
+                        contador_session = 0
                 else:
                     logging.warning("Falta el correo, el link del archivo o el nombre completo en la fila.")
                     fallidos += 1
